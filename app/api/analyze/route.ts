@@ -1,16 +1,18 @@
 // ============================================================================
 // Hardware Source: app/api/analyze/route.ts
-// Version: 1.2.0 — 2026-01-19
-// Why: Integration with OpenAI and Apify for automated analysis
+// Version: 1.3.0 — 2026-01-20
+// Why: Integration with OpenAI and Apify for automated analysis (Capacity + Ideology)
 // Env / Identity: API Route / Uses OPENAI_API_KEY & APIFY_API_TOKEN
 // ============================================================================
 
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { generateSystemPrompt } from '@/lib/analysis/prompt';
+import { generateIdeologyPrompt } from '@/lib/analysis/ideology_prompt';
 import { scrapeTwitterProfile, XApiError } from '@/lib/twitter/scraper';
 import { extractSignalsFromScrape } from '@/lib/utils/parser';
 import { DBService } from '@/lib/db/service';
+import { AnalysisOutput } from '@/lib/analysis/types';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -31,40 +33,6 @@ const NEWS_KEYWORDS = [
 const BOT_KEYWORDS = [
     "bot", "automation", "auto", "rss", "feed", "api"
 ];
-
-const ANALYSIS_SCHEMA_GUIDE = `
-{
-  "status": "success",
-  "analysis_meta": {
-    "total_signals_processed": 0,
-    "primary_focus_area": "A|B|C|D|Mixed",
-    "confidence_score": 0
-  },
-  "axis_scores": {
-    "authority_orientation": { "value": 0, "confidence": "Low|Medium|High", "evidence": ["signal"] },
-    "liberty_orientation": { "value": 0, "confidence": "Low|Medium|High", "evidence": ["signal"] },
-    "ingroup_outgroup": { "value": 0, "confidence": "Low|Medium|High", "evidence": ["signal"] },
-    "conflict_tolerance": { "value": 0, "confidence": "Low|Medium|High", "evidence": ["signal"] }
-  },
-  "dominant_tendency": {
-    "label": "String",
-    "explanation": "String"
-  },
-  "discourse_clusters": [
-    {
-      "cluster_name": "String",
-      "mapped_category": "A|B|C|D",
-      "description": "String",
-      "associated_signals": ["#tag1", "#tag2"],
-      "engagement_level": "Low|Medium|High"
-    }
-  ],
-  "discourse_diversity": {
-    "rating": "Echo Chamber|Focused|Balanced|Chaotic",
-    "explanation": "String"
-  },
-  "user_facing_disclaimer": "String"
-}`.trim();
 
 function normalizeText(input: string) {
     return input.toLowerCase().replace(/\s+/g, " ").trim();
@@ -160,95 +128,25 @@ function assessAccountEligibility(input: {
     return { ok: true, flags };
 }
 
-function isValidAnalysisResult(result: any) {
-    if (!result || result.status !== "success") return false;
-    if (!result.analysis_meta) return false;
-    if (typeof result.analysis_meta.total_signals_processed !== "number") return false;
-    if (typeof result.analysis_meta.primary_focus_area !== "string") return false;
-    if (typeof result.analysis_meta.confidence_score !== "number") return false;
-    if (!result.axis_scores) return false;
-    if (!result.axis_scores.authority_orientation) return false;
-    if (!result.axis_scores.liberty_orientation) return false;
-    if (!result.axis_scores.ingroup_outgroup) return false;
-    if (!result.axis_scores.conflict_tolerance) return false;
-    const axisEntries = [
-        result.axis_scores.authority_orientation,
-        result.axis_scores.liberty_orientation,
-        result.axis_scores.ingroup_outgroup,
-        result.axis_scores.conflict_tolerance,
+function isValidAnalysisResult(result: unknown): result is AnalysisOutput {
+    if (!result || typeof result !== "object") return false;
+    const record = result as Record<string, unknown>;
+    const dimensions = record.dimensions as Record<string, unknown> | undefined;
+    if (!dimensions) return false;
+    const requiredDims = [
+        "capacity_for_structure",
+        "autonomy_sensitivity",
+        "group_identity_strength",
+        "confrontation_readiness",
+        "transformation_drive",
     ];
-    if (!axisEntries.every((axis: any) => {
-        return (
-            axis &&
-            typeof axis.value === "number" &&
-            axis.value >= -10 &&
-            axis.value <= 10 &&
-            ["Low", "Medium", "High"].includes(axis.confidence) &&
-            Array.isArray(axis.evidence) &&
-            axis.evidence.every((item: any) => typeof item === "string")
-        );
-    })) {
-        return false;
-    }
-    if (!result.dominant_tendency) return false;
-    if (typeof result.dominant_tendency.label !== "string") return false;
-    if (typeof result.dominant_tendency.explanation !== "string") return false;
-    if (!Array.isArray(result.discourse_clusters)) return false;
-    if (!result.discourse_clusters.every((cluster: any) => {
-        return (
-            cluster &&
-            typeof cluster.cluster_name === "string" &&
-            ["A", "B", "C", "D"].includes(cluster.mapped_category) &&
-            typeof cluster.description === "string" &&
-            Array.isArray(cluster.associated_signals) &&
-            cluster.associated_signals.every((signal: any) => typeof signal === "string") &&
-            ["Low", "Medium", "High"].includes(cluster.engagement_level)
-        );
-    })) {
-        return false;
-    }
-    if (!result.discourse_diversity) return false;
-    if (!["Echo Chamber", "Focused", "Balanced", "Chaotic"].includes(result.discourse_diversity.rating)) {
-        return false;
-    }
-    if (typeof result.discourse_diversity.explanation !== "string") return false;
-    if (typeof result.user_facing_disclaimer !== "string") return false;
+    if (!requiredDims.every((key) => typeof dimensions[key] === "number")) return false;
+
+    const analysisMeta = record.analysis_meta as Record<string, unknown> | undefined;
+    if (!analysisMeta) return false;
+    if (typeof analysisMeta.confidence_score !== "number") return false;
+
     return true;
-}
-
-async function repairAnalysisPayload(rawOutput: string, inputPayload: string) {
-    const repairPrompt = [
-        "You are a strict JSON repair tool.",
-        "Return ONLY valid JSON that matches this schema exactly:",
-        ANALYSIS_SCHEMA_GUIDE,
-        "If fields are missing, infer them from the input; if uncertain, use safe defaults.",
-        "Do not add extra keys. Do not include markdown.",
-        "",
-        "Input payload:",
-        inputPayload,
-        "",
-        "Raw model output:",
-        rawOutput
-    ].join("\n");
-
-    const completion = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        messages: [
-            { role: "system", content: "You output strict JSON only." },
-            { role: "user", content: repairPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0,
-    });
-
-    const content = completion.choices[0].message.content;
-    if (!content) return null;
-
-    try {
-        return JSON.parse(content);
-    } catch {
-        return null;
-    }
 }
 
 export async function POST(request: Request) {
@@ -360,51 +258,95 @@ export async function POST(request: Request) {
                 );
             }
 
-            // OpenAI Analysis
-            const systemPrompt = generateSystemPrompt();
+            // OpenAI Analysis Step 1: Capacity Profile
+            const systemPromptV1 = generateSystemPrompt();
             const userMessageContent = JSON.stringify(analysisInput);
 
-            console.log("--- Sending Request to AI ---");
-
-            const completion = await openai.chat.completions.create({
+            console.log("--- Sending Request to AI (Step 1: Capacity) ---");
+            const completionV1 = await openai.chat.completions.create({
                 model: OPENAI_MODEL,
                 messages: [
-                    { role: "system", content: systemPrompt },
+                    { role: "system", content: systemPromptV1 },
                     { role: "user", content: userMessageContent },
                 ],
                 response_format: { type: "json_object" },
                 temperature: 0.1,
             });
 
-            const aiContent = completion.choices[0].message.content;
+            const aiContentV1 = completionV1.choices[0].message.content;
+            if (!aiContentV1) throw new Error("AI Step 1 returned empty content");
 
-            if (!aiContent) {
-                throw new Error("AI returned empty content");
-            }
-
-            let analysisResult: any = null;
+            let capacityResult: AnalysisOutput;
             try {
-                analysisResult = JSON.parse(aiContent);
+                const parsed = JSON.parse(aiContentV1) as unknown;
+                if (!isValidAnalysisResult(parsed)) {
+                    throw new Error("AI Step 1 result missing required fields");
+                }
+                capacityResult = parsed;
             } catch {
-                analysisResult = null;
+                throw new Error("AI Step 1 JSON Parse Error");
             }
 
-            if (!isValidAnalysisResult(analysisResult)) {
-                console.warn("AI returned invalid payload. Attempting repair.");
-                const repaired = await repairAnalysisPayload(aiContent, userMessageContent);
-                if (!isValidAnalysisResult(repaired)) {
-                    throw new Error("AI returned invalid analysis payload");
+            // OpenAI Analysis Step 2: Ideological Tendency
+            const systemPromptV2 = generateIdeologyPrompt();
+            // Input for Step 2 includes the Capacity Profile we just generated + original signals
+            const step2Input = {
+                capacity_profile: capacityResult,
+                evidence_summary: analysisInput.signal_summary,
+                // We pass limited context to save tokens, the specific signals
+                key_signals: {
+                    hashtags: analysisInput.weighted_hashtags,
+                    keywords: analysisInput.weighted_keywords
                 }
-                analysisResult = repaired;
+            };
+
+            console.log("--- Sending Request to AI (Step 2: Ideology) ---");
+            const completionV2 = await openai.chat.completions.create({
+                model: OPENAI_MODEL,
+                messages: [
+                    { role: "system", content: systemPromptV2 },
+                    { role: "user", content: JSON.stringify(step2Input) },
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.2, // Slightly higher temp for interpretive variety
+            });
+
+            const aiContentV2 = completionV2.choices[0].message.content;
+            let ideologyResult: AnalysisOutput["ideological_analysis"] | null = null;
+            if (aiContentV2) {
+                try {
+                    ideologyResult = JSON.parse(aiContentV2) as AnalysisOutput["ideological_analysis"];
+                } catch {
+                    ideologyResult = null;
+                }
             }
-            console.log("--- AI Analysis Complete ---");
+
+            // Merge Results
+            const finalResult = {
+                ...capacityResult,
+                ideological_analysis: ideologyResult ?? undefined, // Attach Step 2 result
+                analysis_meta: {
+                    ...capacityResult.analysis_meta,
+                    primary_focus_area: capacityResult.analysis_meta?.primary_focus_area ?? "Mixed",
+                    confidence_score: capacityResult.analysis_meta?.confidence_score ?? 0,
+                    total_signals_processed: signals.interaction_summary.total,
+                    timestamp: new Date().toISOString()
+                }
+            };
+
+            // Validate
+            if (!isValidAnalysisResult(finalResult)) {
+                console.warn("Validation failed on merged result");
+            }
+
+            console.log("--- AI Analysis Complete (Both Steps) ---");
 
             if (normalizedUsername) {
-                DBService.saveUser(normalizedUsername, analysisResult);
+                DBService.saveUser(normalizedUsername, finalResult);
             }
 
             return NextResponse.json({
-                ...analysisResult,
+                ...finalResult,
                 _meta: {
                     is_cached: false,
                     last_updated: new Date().toISOString(),
@@ -418,7 +360,7 @@ export async function POST(request: Request) {
             { status: 400 }
         );
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Server Error:", error);
 
         if (error instanceof XApiError) {
@@ -454,10 +396,11 @@ export async function POST(request: Request) {
             );
         }
 
+        const message = error instanceof Error ? error.message : "Internal Server Error";
         return NextResponse.json(
             {
                 status: "error",
-                message: error.message || "Internal Server Error"
+                message
             },
             { status: 500 }
         );

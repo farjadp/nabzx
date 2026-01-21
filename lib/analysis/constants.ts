@@ -1,53 +1,44 @@
 // ============================================================================
 // Hardware Source: lib/analysis/constants.ts
-// Version: 3.0.0 — 2026-01-19
-// Why: Provide discourse map + rules for the A/B/C/D model
-// Env / Identity: Constants / Prompt Engineering
+// Version: 3.1.0 — 2026-01-20
+// Why: Capacity-Based Discourse Model Definitions
+// Env / Identity: Constants
 // ============================================================================
 
-export const REFERENCE_DISCOURSE_MAP = {
-    A: {
-        category: "Structural Change",
-        scope: "System overhaul, regime change, radical restructuring, constitutional reset",
-        signals: [
-            "revolution", "overthrow", "regime change", "collapse the system",
-            "structural reform", "constitution", "dismantle", "end the system",
-            "transition", "post-regime"
-        ]
-    },
-    B: {
-        category: "Reform & Development",
-        scope: "Policy reform, institution building, elections, gradual change, governance quality",
-        signals: [
-            "reform", "policy", "election", "institutional", "governance",
-            "development", "transparency", "accountability", "anti-corruption",
-            "public services"
-        ]
-    },
-    C: {
-        category: "Resistance / Ideology",
-        scope: "Identity, ideology, resistance language, religious or nationalist framing",
-        signals: [
-            "resistance", "ideology", "faith", "martyr", "identity",
-            "anti-imperial", "anti-west", "revolutionary values",
-            "tradition", "cultural purity"
-        ]
-    },
-    D: {
-        category: "Livelihood / Economy",
-        scope: "Cost of living, jobs, inflation, currency, sanctions impact, daily life",
-        signals: [
-            "inflation", "jobs", "wages", "housing", "currency",
-            "sanctions", "prices", "livelihood", "poverty",
-            "economic hardship"
-        ]
-    }
-} as const;
+export const CAPABILITY_MAPPING = `
+========================
+DIMENSION MAPPING (MANDATORY)
+========================
+Map the raw analytical dimensions to the following POSITIVE / NEUTRAL capacities:
 
-export const OPERATIONAL_RULES = [
-    "Use weighted signals: higher weights mean stronger evidence.",
-    "Retweets without added text do NOT count as core signals; they only hint at diversity.",
-    "If signals are sparse or repetitive, reduce confidence and keep clusters minimal.",
-    "Do not infer identity or personal belief; describe discourse patterns only.",
-    "Avoid generic summaries; cite concrete signals from the input."
-];
+1. Authority  →  Capacity for Structure
+   (preference for order, coordination, and centralized decision-making)
+
+2. Liberty  →  Autonomy Sensitivity
+   (attention to personal freedom, individual choice, and resistance to coercion)
+
+3. Tribalism  →  Group Identity Strength
+   (importance placed on collective identity and in-group cohesion)
+
+4. Conflict  →  Confrontation Readiness
+   (readiness to engage directly with disagreement or tension)
+
+5. Change Horizon  →  Transformation Drive
+   (energy toward gradual or rapid systemic change)
+`;
+
+export const FRAMING_RULES = `
+========================
+CRITICAL FRAMING RULES
+========================
+- You MUST NOT frame any dimension as a flaw, weakness, or moral judgment.
+- You MUST describe each dimension as a form of CAPACITY, SENSITIVITY, or ORIENTATION.
+- High or low values are DIFFERENT MODES, not good or bad.
+- Avoid warning, alarmist, or corrective language.
+`;
+
+export const DISCLAIMER_TEXT = "This profile reflects observed discourse behavior and interaction patterns. It is not an assessment of personal beliefs, character, or values.";
+
+// Legacy export if needed to avoid breaking other imports temporarily, though prompt.ts will be updated to not use it.
+export const REFERENCE_DISCOURSE_MAP = {};
+export const OPERATIONAL_RULES = [];

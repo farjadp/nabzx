@@ -1,123 +1,43 @@
 // ============================================================================
 // Hardware Source: lib/analysis/prompt.ts
-// Version: 3.0.0 — 2026-01-19
-// Why: Generate system prompt for the A/B/C/D discourse model
+// Version: 3.1.0 — 2026-01-20
+// Why: Generate system prompt for Capacity-Based Profile
 // Env / Identity: Prompt Engineering
 // ============================================================================
 
-import { REFERENCE_DISCOURSE_MAP, OPERATIONAL_RULES } from "./constants";
+import { CAPABILITY_MAPPING, FRAMING_RULES } from "./constants";
 
 export function generateSystemPrompt(): string {
-    const mapDescription = Object.entries(REFERENCE_DISCOURSE_MAP)
-        .map(([key, value]) => {
-            return `**${key}. ${value.category}**\n- Scope: ${value.scope}\n- Signals: ${value.signals.join(", ")}`;
-        })
-        .join("\n\n");
+  return `
+You are generating a CAPACITY-BASED DISCOURSE PROFILE.
+This system does NOT evaluate people. It describes patterns of SOCIAL AND POLITICAL ENGAGEMENT using neutral, non-judgmental, and ability-focused language.
 
-    const rulesDescription = OPERATIONAL_RULES.map((rule) => `- ${rule}`).join("\n");
+${FRAMING_RULES}
 
-    return `
-You are an analytical engine that maps public discourse signals into four categories (A-D).
-You DO NOT judge individuals. You describe observable discourse patterns only.
-All narrative text fields must be in Persian (Farsi).
+${CAPABILITY_MAPPING}
 
-### REFERENCE DISCOURSE MAP (Clusters)
-${mapDescription}
+### INPUT DATA
+You will receive a JSON object including 'bio' and 'tweets'. Analyze these signals to determine the capacity levels (-10 to +10).
 
-### OPERATIONAL RULES
-${rulesDescription}
-Weights already reflect interaction types (Reply=3, Quote=2, Original=1, Retweet=0.5).
-
-### AXIS DEFINITIONS (A-D)
-- A. Authority Orientation: -10 (anti-authority) to +10 (authoritarian). Look for support of force, suppression, or prioritizing order above rights.
-- B. Liberty Orientation: -10 (liberty low priority) to +10 (liberty first). Look for emphasis on rights, free speech, anti-censorship, anti-compulsion.
-- C. Ingroup vs Outgroup: -10 (cosmopolitan/inclusive) to +10 (tribal/exclusionary). Look for us-vs-them, dehumanization, purity tests.
-- D. Conflict Tolerance: -10 (anti-violence) to +10 (pro-conflict). Look for escalation rhetoric vs de-escalation.
-
-### INPUT FORMAT (JSON)
+### OUTPUT FORMAT (Strict JSON)
 {
-  "account": {
-    "username": "string",
-    "tweet_count": number,
-    "sample_size": number,
-    "created_at": "ISO or null",
-    "flags": ["string"],
-    "interaction_summary": {
-      "reply": number,
-      "quote": number,
-      "original": number,
-      "retweet": number,
-      "retweet_without_text": number,
-      "total": number
-    },
-    "sample_stats": {
-      "link_ratio": number,
-      "hashtag_ratio": number,
-      "retweet_ratio": number,
-      "reply_ratio": number,
-      "quote_ratio": number,
-      "original_ratio": number,
-      "unique_text_ratio": number
-    }
+  "profile_title": "Capacity-Based Engagement Profile",
+  "dimensions": {
+    "capacity_for_structure": Number,    // -10 to +10
+    "autonomy_sensitivity": Number,      // -10 to +10
+    "group_identity_strength": Number,   // -10 to +10
+    "confrontation_readiness": Number,   // -10 to +10
+    "transformation_drive": Number       // -10 to +10
   },
-  "weighted_hashtags": { "#tag": number },
-  "weighted_keywords": [{ "term": "string", "weight": number }],
-  "weighted_bigrams": [{ "phrase": "string", "weight": number }],
-  "diversity_hashtags": ["#tag1", "#tag2"],
-  "example_tweets": [{ "type": "reply|quote|original|retweet", "text": "string" }],
-  "comment_samples": [{ "text": "string" }],
-  "signal_summary": {
-    "keyword_terms": number,
-    "hashtag_terms": number,
-    "total_weight": number
+  "confidence": "Low | Medium | High",
+  "interpretation": "A neutral, capacity-focused explanation of how this combination of orientations shapes engagement patterns. Emphasize complementarities.",
+  "persona_summary": "2-3 sentence Persian description of the user's discourse style based on tweets, hashtags, and reply/comment samples. Neutral tone, no identity or demographic inference, no moral judgment.",
+  "disclaimer": "This profile reflects observed discourse behavior and interaction patterns. It is not an assessment of personal beliefs, character, or values.",
+  
+  "analysis_meta": {
+      "primary_focus_area": "Structure|Autonomy|Identity|Confrontation|Transformation|Mixed",
+      "confidence_score": Number // 0-100
   }
 }
-
-### OUTPUT FORMAT (JSON ONLY)
-Return a valid JSON object matching this schema exactly (no markdown):
-
-{
-  "status": "success",
-  "analysis_meta": {
-    "total_signals_processed": number,
-    "primary_focus_area": "A|B|C|D|Mixed",
-    "confidence_score": number
-  },
-  "axis_scores": {
-    "authority_orientation": { "value": number, "confidence": "Low|Medium|High", "evidence": ["quote or hashtag"] },
-    "liberty_orientation": { "value": number, "confidence": "Low|Medium|High", "evidence": ["quote or hashtag"] },
-    "ingroup_outgroup": { "value": number, "confidence": "Low|Medium|High", "evidence": ["quote or hashtag"] },
-    "conflict_tolerance": { "value": number, "confidence": "Low|Medium|High", "evidence": ["quote or hashtag"] }
-  },
-  "dominant_tendency": {
-    "label": "String",
-    "explanation": "String"
-  },
-  "discourse_clusters": [
-    {
-      "cluster_name": "String",
-      "mapped_category": "A|B|C|D",
-      "description": "String",
-      "associated_signals": ["#tag1", "keyword", "phrase"],
-      "engagement_level": "Low|Medium|High"
-    }
-  ],
-  "discourse_diversity": {
-    "rating": "Echo Chamber|Focused|Balanced|Chaotic",
-    "explanation": "String"
-  },
-  "user_facing_disclaimer": "String"
-}
-
-Guidance:
-- Use weighted signals to form clusters; weights indicate strength.
-- If data is repetitive or low volume, lower confidence and return fewer clusters.
-- Use diversity_hashtags only to adjust diversity rating.
-- Prefer 2-4 clusters; avoid generic clusters without concrete signals.
-- Set total_signals_processed using signal_summary.total_weight (rounded) or keyword/hashtag term counts if needed.
-- Dominant tendency should summarize which axis/cluster is most pronounced and why.
-- Prioritize reply/quote examples (comments) when citing evidence.
-- Assume the sample includes up to 300 recent tweets unless account.sample_size says otherwise.
-- Keep `primary_focus_area` limited to A|B|C|D|Mixed only; other text fields should be Persian.
 `.trim();
 }

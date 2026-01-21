@@ -96,9 +96,10 @@ export function AxisScoresChart({ scores }: AxisScoresChartProps) {
                             borderRadius: "12px",
                             boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                         }}
-                        formatter={(value: number, name, item) => {
+                        formatter={(value: number | undefined, name, item) => {
                             const label = item?.payload?.label || name;
-                            return [`${value}`, label];
+                            const displayValue = typeof value === "number" ? value : 0;
+                            return [`${displayValue}`, label];
                         }}
                     />
                 </BarChart>

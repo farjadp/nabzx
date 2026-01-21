@@ -62,6 +62,14 @@ export interface ScrapedData {
     source: "twitter_api";
 }
 
+type ApiErrorPayload = {
+    errors?: Array<{ detail?: string; title?: string; code?: string }>;
+    title?: string;
+    error?: string;
+    access_token?: string;
+    expires_in?: number;
+};
+
 export class XApiError extends Error {
     status: number;
     code?: string;
@@ -104,7 +112,7 @@ function getBasicAuthHeader(username: string, password: string) {
     return `Basic ${encoded}`;
 }
 
-function buildApiErrorMessage(status: number, payload: any) {
+function buildApiErrorMessage(status: number, payload: ApiErrorPayload | null) {
     const apiMessage = payload?.errors?.[0]?.detail || payload?.title || payload?.error;
     return apiMessage ? `X API ${status}: ${apiMessage}` : `X API ${status}`;
 }
@@ -127,10 +135,10 @@ async function requestBearerToken(
     );
 
     const text = await response.text();
-    let payload: any = null;
+    let payload: ApiErrorPayload | null = null;
     if (text) {
         try {
-            payload = JSON.parse(text);
+            payload = JSON.parse(text) as ApiErrorPayload;
         } catch {
             payload = null;
         }
@@ -176,8 +184,8 @@ async function fetchBearerFromOAuth2ClientCredentials() {
     for (const url of OAUTH2_CLIENT_TOKEN_URLS) {
         try {
             return await requestBearerToken(url, authHeader);
-        } catch (error: any) {
-            lastError = typeof error?.message === "string" ? error.message : "unknown error";
+        } catch (error: unknown) {
+            lastError = error instanceof Error ? error.message : "unknown error";
         }
     }
 
@@ -195,8 +203,8 @@ async function fetchBearerFromConsumerKeys() {
     for (const url of OAUTH1_APP_TOKEN_URLS) {
         try {
             return await requestBearerToken(url, authHeader);
-        } catch (error: any) {
-            lastError = typeof error?.message === "string" ? error.message : "unknown error";
+        } catch (error: unknown) {
+            lastError = error instanceof Error ? error.message : "unknown error";
         }
     }
 
@@ -218,8 +226,8 @@ async function getBearerToken(): Promise<string> {
             const tokenData = await fetchBearerFromOAuth2ClientCredentials();
             cachedBearerToken = { token: tokenData.token, expiresAt: tokenData.expiresAt, source: "oauth2" };
             return tokenData.token;
-        } catch (error: any) {
-            errors.push(typeof error?.message === "string" ? error.message : "oauth2 error");
+        } catch (error: unknown) {
+            errors.push(error instanceof Error ? error.message : "oauth2 error");
         }
     }
 
@@ -228,8 +236,8 @@ async function getBearerToken(): Promise<string> {
             const tokenData = await fetchBearerFromConsumerKeys();
             cachedBearerToken = { token: tokenData.token, expiresAt: tokenData.expiresAt, source: "oauth1" };
             return tokenData.token;
-        } catch (error: any) {
-            errors.push(typeof error?.message === "string" ? error.message : "oauth1 error");
+        } catch (error: unknown) {
+            errors.push(error instanceof Error ? error.message : "oauth1 error");
         }
     }
 
@@ -268,7 +276,7 @@ async function fetchTwitterApi<T>(path: string, params: Record<string, string | 
     }
 
     const text = await response.text();
-    let payload: any = null;
+    let payload: unknown = null;
     if (text) {
         try {
             payload = JSON.parse(text);
@@ -277,19 +285,20 @@ async function fetchTwitterApi<T>(path: string, params: Record<string, string | 
         }
     }
 
+    const payloadInfo = payload as ApiErrorPayload | null;
     const errorCode =
-        payload?.errors?.[0]?.code ||
-        payload?.errors?.[0]?.title ||
-        payload?.title ||
-        payload?.error;
+        payloadInfo?.errors?.[0]?.code ||
+        payloadInfo?.errors?.[0]?.title ||
+        payloadInfo?.title ||
+        payloadInfo?.error;
 
     if (!response.ok) {
-        const message = buildApiErrorMessage(response.status, payload);
+        const message = buildApiErrorMessage(response.status, payloadInfo);
         throw new XApiError(message, response.status, errorCode);
     }
 
-    if (payload?.errors?.length) {
-        const message = buildApiErrorMessage(response.status, payload);
+    if (payloadInfo?.errors?.length) {
+        const message = buildApiErrorMessage(response.status, payloadInfo);
         const status = response.status === 200 ? 404 : response.status;
         throw new XApiError(message, status, errorCode);
     }
@@ -312,7 +321,7 @@ async function fetchUserTweets(userId: string): Promise<ScrapedTweet[]> {
 
     while (tweets.length < MAX_TWEETS) {
         const remaining = MAX_TWEETS - tweets.length;
-        const pageSize = Math.min(100, remaining);
+        const pageSize = remaining < 5 ? 5 : Math.min(100, remaining);
 
         const response = await fetchTwitterApi<{
             data?: Array<{
@@ -350,6 +359,11 @@ async function fetchUserTweets(userId: string): Promise<ScrapedTweet[]> {
                 hasUrls,
                 isRetweetWithoutText,
             });
+        }
+
+        if (tweets.length >= MAX_TWEETS) {
+            tweets.length = MAX_TWEETS;
+            break;
         }
 
         paginationToken = response?.meta?.next_token;
