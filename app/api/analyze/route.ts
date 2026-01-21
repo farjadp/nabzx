@@ -200,10 +200,35 @@ export async function POST(request: Request) {
             // 1. Scrape data
             const settings = SettingsService.getSettings();
             const scraperSource = settings.scraper_source;
-
-            const scrapedData = scraperSource === "apify"
-                ? await scrapeTwitterProfileViaApify(username)
-                : await scrapeTwitterProfile(username);
+            let scrapedData;
+            try {
+                scrapedData = scraperSource === "apify"
+                    ? await scrapeTwitterProfileViaApify(username, settings.apify_actor_id)
+                    : await scrapeTwitterProfile(username);
+            } catch (error: unknown) {
+                if (scraperSource === "apify") {
+                    const message = error instanceof Error ? error.message : "Apify error";
+                    if (message.includes("Actor with this name was not found")) {
+                        return NextResponse.json(
+                            {
+                                status: "error",
+                                message: "اکتور Apify پیدا نشد. شناسه اکتور را در پنل ادمین تنظیم کنید.",
+                                code: "ApifyActorNotFound"
+                            },
+                            { status: 502 }
+                        );
+                    }
+                    return NextResponse.json(
+                        {
+                            status: "error",
+                            message: "خطا در ارتباط با Apify. لطفاً تنظیمات و توکن را بررسی کنید.",
+                            code: "ApifyError"
+                        },
+                        { status: 502 }
+                    );
+                }
+                throw error;
+            }
 
             const signals = extractSignalsFromScrape(scrapedData.user.description, scrapedData.tweets);
             const eligibility = assessAccountEligibility({

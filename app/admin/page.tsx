@@ -47,6 +47,7 @@ type ScraperSource = "twitter" | "apify";
 
 interface AdminSettings {
     scraper_source: ScraperSource;
+    apify_actor_id?: string;
     updated_at: string;
 }
 
@@ -56,6 +57,8 @@ export default function AdminDashboard() {
     const [logs, setLogs] = useState<LogItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [updatingSource, setUpdatingSource] = useState(false);
+    const [apifyActorDraft, setApifyActorDraft] = useState("");
+    const [updatingActor, setUpdatingActor] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [maintenanceMode, setMaintenanceMode] = useState(false);
 
@@ -83,6 +86,12 @@ export default function AdminDashboard() {
         const interval = setInterval(fetchData, 10000); // Polling every 10s
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        if (settings?.apify_actor_id) {
+            setApifyActorDraft(settings.apify_actor_id);
+        }
+    }, [settings?.apify_actor_id]);
 
     // Handle Delete
     const handleDelete = async (username: string) => {
@@ -122,6 +131,26 @@ export default function AdminDashboard() {
             console.error("Failed to update scraper source", error);
         } finally {
             setUpdatingSource(false);
+        }
+    };
+
+    const updateApifyActor = async () => {
+        if (updatingActor) return;
+        setUpdatingActor(true);
+        try {
+            const res = await fetch("/api/admin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "set_apify_actor", apify_actor_id: apifyActorDraft }),
+            });
+            const data = await res.json();
+            if (data.status === "success") {
+                setSettings(data.settings);
+            }
+        } catch (error: unknown) {
+            console.error("Failed to update Apify actor", error);
+        } finally {
+            setUpdatingActor(false);
         }
     };
 
@@ -236,38 +265,64 @@ export default function AdminDashboard() {
 
                         </div>
 
-                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-                            <div>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+                            <div className="space-y-2">
                                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Scraping Source</p>
-                                <h4 className="text-lg font-bold text-slate-800 mt-1">Select Active Provider</h4>
-                                <p className="text-xs text-slate-500 mt-1">
+                                <h4 className="text-lg font-bold text-slate-800">Select Active Provider</h4>
+                                <p className="text-xs text-slate-500">
                                     Current: {settings?.scraper_source ? settings.scraper_source.toUpperCase() : "—"}
                                 </p>
+                                <p className="text-xs text-slate-400">
+                                    Last update: {settings?.updated_at ? new Date(settings.updated_at).toLocaleString("fa-IR") : "—"}
+                                </p>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => updateScraperSource("twitter")}
-                                    disabled={updatingSource}
-                                    className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "twitter"
-                                        ? "bg-emerald-600 text-white border-emerald-600"
-                                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                                        } disabled:opacity-60`}
-                                >
-                                    Twitter API
-                                </button>
-                                <button
-                                    onClick={() => updateScraperSource("apify")}
-                                    disabled={updatingSource}
-                                    className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "apify"
-                                        ? "bg-amber-600 text-white border-amber-600"
-                                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                                        } disabled:opacity-60`}
-                                >
-                                    Apify
-                                </button>
-                            </div>
-                            <div className="text-xs text-slate-400">
-                                Last update: {settings?.updated_at ? new Date(settings.updated_at).toLocaleString("fa-IR") : "—"}
+                            <div className="flex flex-col gap-3">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => updateScraperSource("twitter")}
+                                        disabled={updatingSource}
+                                        className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "twitter"
+                                            ? "bg-emerald-600 text-white border-emerald-600"
+                                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                            } disabled:opacity-60`}
+                                    >
+                                        Twitter API
+                                    </button>
+                                    <button
+                                        onClick={() => updateScraperSource("apify")}
+                                        disabled={updatingSource}
+                                        className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "apify"
+                                            ? "bg-amber-600 text-white border-amber-600"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                                            } disabled:opacity-60`}
+                                    >
+                                        Apify
+                                    </button>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                        Apify Actor ID
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={apifyActorDraft}
+                                            onChange={(e) => setApifyActorDraft(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all outline-none"
+                                            placeholder="apify/twitter-scraper"
+                                        />
+                                        <button
+                                            onClick={updateApifyActor}
+                                            disabled={updatingActor}
+                                            className="px-4 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-amber-600 transition-all disabled:opacity-60"
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400">
+                                        نمونه: apify/twitter-scraper یا username/actor-name
+                                    </p>
+                                </div>
                             </div>
                         </div>
 

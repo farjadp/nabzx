@@ -45,6 +45,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ status: "success", settings });
         }
 
+        if (action === "set_apify_actor") {
+            const actorId = typeof body.apify_actor_id === "string" ? body.apify_actor_id : "";
+            const settings = SettingsService.updateSettings({ apify_actor_id: actorId });
+            return NextResponse.json({ status: "success", settings });
+        }
+
         return NextResponse.json({ status: "error", message: "Invalid action" }, { status: 400 });
     } catch (error: unknown) {
         console.error("Failed to update admin settings", error);

@@ -111,9 +111,13 @@ function resolveUser(username: string, items: ApifyTweetItem[]): ScrapedUser {
     };
 }
 
-export async function scrapeTwitterProfileViaApify(username: string): Promise<ScrapedData> {
+export async function scrapeTwitterProfileViaApify(username: string, actorId?: string): Promise<ScrapedData> {
     if (!APIFY_API_TOKEN) {
         throw new Error("APIFY_API_TOKEN is not set");
+    }
+    const resolvedActorId = actorId || APIFY_TWITTER_ACTOR_ID;
+    if (!resolvedActorId) {
+        throw new Error("APIFY_TWITTER_ACTOR_ID is not set");
     }
 
     const client = new ApifyClient({ token: APIFY_API_TOKEN });
@@ -125,7 +129,7 @@ export async function scrapeTwitterProfileViaApify(username: string): Promise<Sc
         proxyConfiguration: { useApifyProxy: true },
     };
 
-    const run = await client.actor(APIFY_TWITTER_ACTOR_ID).call(input);
+    const run = await client.actor(resolvedActorId).call(input);
     if (!run?.defaultDatasetId) {
         throw new Error("Apify run failed to return dataset id");
     }
