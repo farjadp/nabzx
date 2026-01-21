@@ -485,6 +485,12 @@ export default function Home() {
                       </div>
                     )}
 
+                    {result._meta?.scraper_source && (
+                      <div className="bg-white/80 text-slate-600 px-3 py-1 rounded-full border border-slate-200">
+                        منبع: {result._meta.scraper_source === "apify" ? "Apify" : "Twitter API"}
+                      </div>
+                    )}
+
                     {typeof result._meta?.history_count === "number" && result._meta.history_count > 0 && (
                       <span className="text-slate-400">
                         ({result._meta.history_count} تحلیل آرشیو شده در ۶ ماه گذشته)

@@ -49,17 +49,17 @@ export interface ScrapedUser {
     created_at?: string;
     verified?: boolean;
     public_metrics?: {
-        tweet_count: number;
-        followers_count: number;
-        following_count: number;
-        listed_count: number;
+        tweet_count?: number;
+        followers_count?: number;
+        following_count?: number;
+        listed_count?: number;
     };
 }
 
 export interface ScrapedData {
     user: ScrapedUser;
     tweets: ScrapedTweet[];
-    source: "twitter_api";
+    source: "twitter_api" | "apify";
 }
 
 type ApiErrorPayload = {

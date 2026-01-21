@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 data-store.json
+settings-store.json
 
 # debug
 npm-debug.log*

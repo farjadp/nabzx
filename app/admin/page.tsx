@@ -43,10 +43,19 @@ interface AdminStats {
     system_status: string;
 }
 
+type ScraperSource = "twitter" | "apify";
+
+interface AdminSettings {
+    scraper_source: ScraperSource;
+    updated_at: string;
+}
+
 export default function AdminDashboard() {
     const [stats, setStats] = useState<AdminStats | null>(null);
+    const [settings, setSettings] = useState<AdminSettings | null>(null);
     const [logs, setLogs] = useState<LogItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [updatingSource, setUpdatingSource] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [maintenanceMode, setMaintenanceMode] = useState(false);
 
@@ -58,6 +67,9 @@ export default function AdminDashboard() {
             if (data.status === "success") {
                 setStats(data.stats);
                 setLogs(data.logs);
+                if (data.settings) {
+                    setSettings(data.settings);
+                }
             }
         } catch (error: unknown) {
             console.error("Failed to load admin data", error);
@@ -92,6 +104,26 @@ export default function AdminDashboard() {
     const filteredLogs = logs.filter((log) =>
         log.username.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const updateScraperSource = async (source: ScraperSource) => {
+        if (updatingSource || settings?.scraper_source === source) return;
+        setUpdatingSource(true);
+        try {
+            const res = await fetch("/api/admin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "set_scraper_source", scraper_source: source }),
+            });
+            const data = await res.json();
+            if (data.status === "success") {
+                setSettings(data.settings);
+            }
+        } catch (error: unknown) {
+            console.error("Failed to update scraper source", error);
+        } finally {
+            setUpdatingSource(false);
+        }
+    };
 
     return (
         <main className={`min-h-screen bg-slate-50 text-slate-800 ${vazir.className} dir-rtl`} dir="rtl">
@@ -202,6 +234,41 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
+                        </div>
+
+                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Scraping Source</p>
+                                <h4 className="text-lg font-bold text-slate-800 mt-1">Select Active Provider</h4>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Current: {settings?.scraper_source ? settings.scraper_source.toUpperCase() : "—"}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => updateScraperSource("twitter")}
+                                    disabled={updatingSource}
+                                    className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "twitter"
+                                        ? "bg-emerald-600 text-white border-emerald-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                        } disabled:opacity-60`}
+                                >
+                                    Twitter API
+                                </button>
+                                <button
+                                    onClick={() => updateScraperSource("apify")}
+                                    disabled={updatingSource}
+                                    className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border ${settings?.scraper_source === "apify"
+                                        ? "bg-amber-600 text-white border-amber-600"
+                                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                        } disabled:opacity-60`}
+                                >
+                                    Apify
+                                </button>
+                            </div>
+                            <div className="text-xs text-slate-400">
+                                Last update: {settings?.updated_at ? new Date(settings.updated_at).toLocaleString("fa-IR") : "—"}
+                            </div>
                         </div>
 
                         {/* Controls & Search */}

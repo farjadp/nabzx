@@ -6,7 +6,6 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
@@ -16,11 +15,13 @@ export async function POST(request: Request) {
         const body = await request.json();
         const { username, password } = body;
 
-        if (username === ADMIN_USER && password === ADMIN_PASSWORD) {
-            const cookieStore = await cookies();
+        const normalizedUsername = typeof username === "string" ? username.trim() : "";
+        const normalizedPassword = typeof password === "string" ? password : "";
 
-            // Set session cookie
-            cookieStore.set('admin_session', 'true', {
+        if (normalizedUsername === ADMIN_USER && normalizedPassword === ADMIN_PASSWORD) {
+            const response = NextResponse.json({ status: "success" });
+
+            response.cookies.set('admin_session', 'true', {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'strict',
@@ -28,11 +29,12 @@ export async function POST(request: Request) {
                 path: '/',
             });
 
-            return NextResponse.json({ status: "success" });
+            return response;
         }
 
         return NextResponse.json({ status: "error", message: "Invalid credentials" }, { status: 401 });
-    } catch {
+    } catch (error: unknown) {
+        console.error("Admin login failed", error);
         return NextResponse.json({ status: "error" }, { status: 500 });
     }
 }

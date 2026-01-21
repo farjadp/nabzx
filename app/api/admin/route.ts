@@ -7,11 +7,13 @@
 
 import { NextResponse } from 'next/server';
 import { DBService } from '@/lib/db/service';
+import { SettingsService } from '@/lib/db/settings';
 
 export async function GET() {
     try {
         const stats = DBService.getStats();
         const logs = DBService.getAllUsers();
+        const settings = SettingsService.getSettings();
 
         return NextResponse.json({
             status: "success",
@@ -21,11 +23,32 @@ export async function GET() {
                 est_cost_saved: (stats.total_history_points * 0.05).toFixed(2), // Mock calculation
                 system_status: stats.status
             },
-            logs: logs
+            logs: logs,
+            settings
         });
     } catch (error: unknown) {
         console.error("Failed to fetch admin data", error);
         return NextResponse.json({ status: "error", message: "Failed to fetch admin data" }, { status: 500 });
+    }
+}
+
+export async function POST(request: Request) {
+    try {
+        const body = await request.json();
+        const { action, scraper_source } = body;
+
+        if (action === "set_scraper_source") {
+            if (scraper_source !== "twitter" && scraper_source !== "apify") {
+                return NextResponse.json({ status: "error", message: "Invalid scraper source" }, { status: 400 });
+            }
+            const settings = SettingsService.updateSettings({ scraper_source });
+            return NextResponse.json({ status: "success", settings });
+        }
+
+        return NextResponse.json({ status: "error", message: "Invalid action" }, { status: 400 });
+    } catch (error: unknown) {
+        console.error("Failed to update admin settings", error);
+        return NextResponse.json({ status: "error", message: "Failed to update settings" }, { status: 500 });
     }
 }
 

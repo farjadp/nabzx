@@ -69,5 +69,6 @@ export interface AnalysisOutput {
         last_updated: string;
         history_count: number;
         account_flags: string[];
+        scraper_source?: "twitter" | "apify";
     };
 }

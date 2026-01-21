@@ -10,8 +10,10 @@ import OpenAI from 'openai';
 import { generateSystemPrompt } from '@/lib/analysis/prompt';
 import { generateIdeologyPrompt } from '@/lib/analysis/ideology_prompt';
 import { scrapeTwitterProfile, XApiError } from '@/lib/twitter/scraper';
+import { scrapeTwitterProfileViaApify } from '@/lib/twitter/apify';
 import { extractSignalsFromScrape } from '@/lib/utils/parser';
 import { DBService } from '@/lib/db/service';
+import { SettingsService } from '@/lib/db/settings';
 import { AnalysisOutput } from '@/lib/analysis/types';
 
 const openai = new OpenAI({
@@ -196,7 +198,12 @@ export async function POST(request: Request) {
             }
 
             // 1. Scrape data
-            const scrapedData = await scrapeTwitterProfile(username);
+            const settings = SettingsService.getSettings();
+            const scraperSource = settings.scraper_source;
+
+            const scrapedData = scraperSource === "apify"
+                ? await scrapeTwitterProfileViaApify(username)
+                : await scrapeTwitterProfile(username);
 
             const signals = extractSignalsFromScrape(scrapedData.user.description, scrapedData.tweets);
             const eligibility = assessAccountEligibility({
@@ -351,7 +358,8 @@ export async function POST(request: Request) {
                     is_cached: false,
                     last_updated: new Date().toISOString(),
                     history_count: historyCount,
-                    account_flags: eligibility.flags || []
+                    account_flags: eligibility.flags || [],
+                    scraper_source: scraperSource
                 }
             });
         }
